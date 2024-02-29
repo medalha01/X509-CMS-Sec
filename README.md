@@ -17,4 +17,4 @@ This C++ program leverages OpenSSL to perform cryptographic operations, focusing
 Compile and run the program as follows:
 
 ```bash
-g++ -o verify_signatures verify_signatures.cpp -lssl -lcrypto```
+g++ -o verify_signatures verify_signatures.cpp -lssl -lcrypto
