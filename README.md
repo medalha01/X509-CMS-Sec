@@ -26,3 +26,9 @@ Run the program by executing the compiled binary, passing the required arguments
 
 ## Security Note
 This tool is intended for educational and testing purposes. Users should be aware of the security implications of digital signature verification and certificate handling in production environments. Proper understanding and cautious handling of cryptographic materials are advised.
+
+## Warnings
+- It works with .pem or .der but the input must be of uint8/unsigned char.
+- There are tools for P7B and P7C decoding a certificate extraction.
+- The code is not memory safe, and should be handled with care.
+- It was originally design to work with a FFI from Dart.
