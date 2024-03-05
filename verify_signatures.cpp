@@ -53,7 +53,18 @@ typedef struct ByteArray
         if (data != nullptr)
             delete[] data;
     }
-};
+} ByteArray;
+
+typedef struct CrlUpdateInfo
+{
+
+    char *lastUpdate;
+    char *nextUpdate;
+    bool isExpired;
+    bool errorStatus;
+
+} CrlUpdateInfo;
+
 // Código depreciado
 struct VerificationResponse
 {
@@ -100,8 +111,8 @@ struct CertificateInformation
     char *subjectOrganization;     // Organização do titular
     char *subjectOrganizationUnit; // Unidade de Organização do titular
     char *serialNumber;            // Número de série do certificado
-    char *lastCrlUpdate;           // Data da última atualização da Lista de Certificados Revogados (CRL)
-    char *nextCrlUpdate;           // Data da próxima atualização da CRL
+    char *lastcrlDateInformation;  // Data da última atualização da Lista de Certificados Revogados (CRL)
+    char *nextcrlDateInformation;  // Data da próxima atualização da CRL
     char *validFrom;               // Data de início de validade do certificado
     char *validTo;                 // Data de término de validade do certificado
     char *revoked;                 // Indica se o certificado foi revogado
@@ -143,7 +154,6 @@ extern "C"
         OpenSSL_add_all_algorithms();
         OpenSSL_add_all_ciphers();
         OpenSSL_add_all_digests();
-        ERR_load_BIO_strings();
         ERR_load_crypto_strings();
 
         crlbio = BIO_new_mem_buf(pem->data, pem->len);
@@ -188,7 +198,6 @@ extern "C"
          * These function calls initialize openssl for correct work.  *
          * ---------------------------------------------------------- */
         OpenSSL_add_all_algorithms();
-        ERR_load_BIO_strings();
         ERR_load_crypto_strings();
 
         /* Create the Input/Output BIO's */
@@ -277,7 +286,6 @@ extern "C"
         OpenSSL_add_all_algorithms();
         OpenSSL_add_all_ciphers();
         OpenSSL_add_all_digests();
-        ERR_load_BIO_strings();
         ERR_load_crypto_strings();
 
         // Cria um BIO de buffer de memória para armazenar os dados da assinatura
@@ -316,7 +324,6 @@ extern "C"
         OpenSSL_add_all_algorithms();
         OpenSSL_add_all_ciphers();
         OpenSSL_add_all_digests();
-        ERR_load_BIO_strings();
         ERR_load_crypto_strings();
 
         X509 *certificate = nullptr;
@@ -565,7 +572,6 @@ extern "C"
         size_t chainSize)
     {
         OpenSSL_add_all_algorithms();
-        ERR_load_BIO_strings();
         ERR_load_crypto_strings();
 
         // Cria um novo objeto X509_STORE
@@ -665,7 +671,7 @@ extern "C"
 
         X509_NAME_ENTRY *entry = X509_NAME_get_entry(name, index);
         ASN1_STRING *asn1 = X509_NAME_ENTRY_get_data(entry);
-        auto *string = (char *)ASN1_STRING_data(asn1);
+        auto *string = (char *)ASN1_STRING_get0_data(asn1);
         return string;
     }
 
@@ -751,6 +757,29 @@ extern "C"
 
         // Se o resultado da comparação indicar que o certificado não é mais válido
         if (resultNotBefore > 0 || resultNotAfter < 0)
+        {
+            // Define a flag de expiração como true
+            expiratedFlag = true;
+        }
+
+        // Retorna a flag de expiração
+        return expiratedFlag;
+    }
+
+    bool isCrlExpired(const ASN1_TIME *nextUpdate)
+    {
+        time_t *ptime;
+        bool expiratedFlag = false;
+
+        // Obtém o horário atual
+        time_t actualtime = time(nullptr);
+        ptime = &actualtime;
+
+        // Compara o horário atual com a data de expiração do certificado (not_after)
+        int resultNotAfter = X509_cmp_time(nextUpdate, ptime);
+
+        // Se o resultado da comparação indicar que o certificado não é mais válido
+        if (resultNotAfter < 0)
         {
             // Define a flag de expiração como true
             expiratedFlag = true;
@@ -948,7 +977,6 @@ extern "C"
     {
         OpenSSL_add_all_algorithms();
         OpenSSL_add_all_digests();
-        ERR_load_BIO_strings();
         ERR_load_crypto_strings();
 
         CertificateInformation certificateInformation;
@@ -963,10 +991,10 @@ extern "C"
         X509_CRL *decodedCRL = nullptr;
         certificateInformation.revoked = "Indeterminado";
         certificateInformation.signatureIsValid = false;
-        certificateInformation.lastCrlUpdate = "Indeterminado";
-        certificateInformation.nextCrlUpdate = "Indeterminado";
-        const ASN1_TIME *lastCRLUpdateTime = nullptr;
-        const ASN1_TIME *nextCRLUpdateTime = nullptr;
+        certificateInformation.lastcrlDateInformation = "Indeterminado";
+        certificateInformation.nextcrlDateInformation = "Indeterminado";
+        const ASN1_TIME *lastcrlDateInformationTime = nullptr;
+        const ASN1_TIME *nextcrlDateInformationTime = nullptr;
 
         // Verifica se há CRLs disponíveis
         if (crlsSize > 0)
@@ -1028,17 +1056,17 @@ extern "C"
 
         if (decodedCRL != nullptr)
         {
-            lastCRLUpdateTime = X509_CRL_get0_lastUpdate(decodedCRL);
-            nextCRLUpdateTime = X509_CRL_get0_nextUpdate(decodedCRL);
+            lastcrlDateInformationTime = X509_CRL_get0_lastUpdate(decodedCRL);
+            nextcrlDateInformationTime = X509_CRL_get0_nextUpdate(decodedCRL);
 
             // Verifica se as datas da CRL são válidas
             if (
-                lastCRLUpdateTime && nextCRLUpdateTime &&
-                strlen(certificateInformation.lastCrlUpdate) >= 5 &&
-                strlen(certificateInformation.nextCrlUpdate) >= 5)
+                lastcrlDateInformationTime && nextcrlDateInformationTime &&
+                strlen(certificateInformation.lastcrlDateInformation) >= 5 &&
+                strlen(certificateInformation.nextcrlDateInformation) >= 5)
             {
-                certificateInformation.lastCrlUpdate = asn1_timeToString(lastCRLUpdateTime);
-                certificateInformation.nextCrlUpdate = asn1_timeToString(nextCRLUpdateTime);
+                certificateInformation.lastcrlDateInformation = asn1_timeToString(lastcrlDateInformationTime);
+                certificateInformation.nextcrlDateInformation = asn1_timeToString(nextcrlDateInformationTime);
             }
 
             // Libera a memória da CRL
@@ -1072,7 +1100,6 @@ extern "C"
         }
         int ext_nid = OBJ_txt2nid("1.3.6.1.5.5.7.1.1");
 
-
         X509_EXTENSION *ext = X509_get_ext(decodedCertificate, X509_get_ext_by_NID(decodedCertificate, ext_nid, -1));
         if (!ext)
         {
@@ -1092,7 +1119,7 @@ extern "C"
     }
 
     /**
-     * A função getCrlLastUpdateTime recebe um array de CRLs, encontra o horário da última atualização entre eles
+     * A função getCrlUpdateInfoTime recebe um array de CRLs, encontra o horário da última atualização entre eles
      * e retorna-o como uma string.
      *
      * @param crlList Um ponteiro para um array de ponteiros para objetos ByteArray. Esse array representa uma
@@ -1102,7 +1129,7 @@ extern "C"
      * @return uma string que representa o horário da última atualização das CRLs
      * na lista fornecida.
      */
-    char *getCrlLastUpdateTime(ByteArray **crlList, size_t crlListSize)
+    char *getCrlUpdateInfoTime(ByteArray **crlList, size_t crlListSize)
     {
         const ASN1_TIME *updateTime = nullptr;
 
@@ -1773,7 +1800,7 @@ extern "C"
                 if (generalName != nullptr && generalName->type == GEN_URI && generalName->d.uniformResourceIdentifier != nullptr)
                 {
                     ASN1_IA5STRING *urlInASN1 = generalName->d.uniformResourceIdentifier;
-                    auto *url = (char *)ASN1_STRING_data(urlInASN1);
+                    auto *url = (char *)ASN1_STRING_get0_data(urlInASN1);
                     urls[urlIndex] = url;
                     urlIndex++;
                 }
@@ -1967,7 +1994,6 @@ extern "C"
         size_t trustedCertificatesSize)
     {
         OpenSSL_add_all_algorithms();
-        ERR_load_BIO_strings();
         ERR_load_crypto_strings();
 
         X509 *targetX509Cert = nullptr;
@@ -2223,6 +2249,113 @@ extern "C"
         PKCS7_free(p7bChain);
 
         return chainByteArrays;
+    }
+
+    /**
+     * Initializes the CrlUpdateInfo struct with the given parameters.
+     *
+     * @param crl pointer to CrlUpdateInfo struct
+     * @param last string containing last update information
+     * @param next string containing next update information
+     * @param expired boolean indicating if the update is expired
+     * @param error boolean indicating if there was an error
+     *
+     * @return void
+     *
+     * @throws None
+     */
+    void CrlUpdateInfo_Init(CrlUpdateInfo *crl, const char *last, const char *next, bool expired, bool error)
+    {
+        if (last != NULL)
+        {
+            crl->lastUpdate = strdup(last);
+        }
+        else
+        {
+            crl->lastUpdate = NULL;
+        }
+
+        if (next != NULL)
+        {
+            crl->nextUpdate = strdup(next);
+        }
+        else
+        {
+            crl->nextUpdate = NULL;
+        }
+
+        crl->isExpired = expired;
+        crl->errorStatus = error;
+    }
+
+    /**
+     * Cleans up the CrlUpdateInfo structure by freeing memory allocated for lastUpdate and nextUpdate.
+     *
+     * @param crl pointer to CrlUpdateInfo structure
+     *
+     * @return void
+     *
+     * @throws None
+     */
+    void CrlUpdateInfo_Cleanup(CrlUpdateInfo *crl)
+    {
+        free(crl->lastUpdate);
+        free(crl->nextUpdate);
+    }
+
+    /**
+     * Retrieves update information from the provided CRL.
+     *
+     * @param crl Pointer to the ByteArray containing the CRL
+     *
+     * @return CrlUpdateInfo containing the update information
+     *
+     * @throws std::exception if an error occurs during the process
+     */
+    CrlUpdateInfo getUpdateFromCrl(ByteArray *crl)
+    {
+        CrlUpdateInfo crlDateInformation;
+        CrlUpdateInfo_Init(&crlDateInformation, NULL, NULL, false, true);
+        X509_CRL *decodedCrl;
+
+        try
+        {
+
+            decodedCrl = decodeCRLs(crl);
+
+            crlDateInformation.lastUpdate = "Indeterminado";
+            crlDateInformation.nextUpdate = "Indeterminado";
+
+            if (!decodedCrl)
+            {
+
+                return crlDateInformation;
+            }
+
+            const ASN1_TIME *lastUpdate = X509_CRL_get0_lastUpdate(decodedCrl);
+            const ASN1_TIME *nextUpdate = X509_CRL_get0_nextUpdate(decodedCrl);
+
+            // Verifica se as datas da CRL são válidas
+            if (
+                lastUpdate != NULL && nextUpdate != NULL)
+            {
+                crlDateInformation.errorStatus = false;
+                crlDateInformation.lastUpdate = asn1_timeToString(lastUpdate);
+                crlDateInformation.nextUpdate = asn1_timeToString(nextUpdate);
+                crlDateInformation.isExpired = isCrlExpired(nextUpdate);
+            }
+        }
+        catch (const std::exception &e)
+        {
+
+            crlDateInformation.errorStatus = true;
+        }
+
+        if (decodedCrl)
+        {
+            X509_CRL_free(decodedCrl);
+        }
+        return crlDateInformation;
     }
 }
 #endif /* E2EED740_BB73_4E5B_8AEF_DA39A6F50E32 */
